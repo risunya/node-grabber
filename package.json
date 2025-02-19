@@ -4,16 +4,20 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "node index.js"
+    "dev": "node --watch index.js",
+		"commit": "cz"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@grammyjs/conversations": "^2.0.1",
     "@mtcute/dispatcher": "^0.21.0",
     "@mtcute/node": "^0.21.0",
+    "better-sqlite3": "^11.8.1",
     "dotenv": "^16.4.7",
+    "grammy": "^1.35.0",
     "pkg": "^5.8.1"
   }
 }
