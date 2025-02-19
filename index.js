@@ -1,5 +1,6 @@
-import { TelegramClient, html } from '@mtcute/node'
-import 'dotenv/config'
+import { TelegramClient } from '@mtcute/node';
+import { Dispatcher } from '@mtcute/dispatcher';
+import 'dotenv/config';
 
 const apiId = Number(process.env.API_ID);
 const apiHash = process.env.API_HASH;
@@ -9,12 +10,27 @@ if (!apiId || !apiHash) {
 }
 
 const tg = new TelegramClient({
-	apiId: apiId,
+  apiId: apiId,
   apiHash: apiHash,
-  storage: 'my-account' 
-})
+  storage: 'my-account', 
+});
+const dp = new Dispatcher(tg);
+const peer = await tg.resolvePeer("me")
+dp.onNewMessage(async (msg) => {
+  console.log('New message received:', msg.text);
+  try {
+		await msg.forwardTo({toChatId: peer});
+    console.log('Message forwarded to "self"');
+  } catch (error) {
+    console.error('Failed to forward message:', error);
+  }
+});
 
-const self = await tg.start({})
-console.log(`Logged in as ${self.displayName}`)
-
-await tg.sendText('self', html`Hello from <b>MTCute</b>!`)
+(async () => {
+  try {
+    const self = await tg.start(); 
+    console.log(`Logged in as ${self.displayName}`);
+  } catch (error) {
+    console.error('Failed to start client:', error);
+  }
+})();
