@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch index.js",
-		"commit": "cz"
+		"start": "node --watch index.js"
   },
   "keywords": [],
   "author": "",
@@ -17,7 +17,14 @@
     "@mtcute/node": "^0.21.0",
     "better-sqlite3": "^11.8.1",
     "dotenv": "^16.4.7",
-    "grammy": "^1.35.0",
-    "pkg": "^5.8.1"
+    "grammy": "^1.35.0"
+  },
+  "devDependencies": {
+    "cz-conventional-changelog": "^3.3.0"
+  },
+  "config": {
+    "commitizen": {
+      "path": "./node_modules/cz-conventional-changelog"
+    }
   }
 }

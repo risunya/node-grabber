@@ -1,6 +1,6 @@
 import { SqliteStorage, TelegramClient } from '@mtcute/node';
 import { Bot } from "grammy"; 
-import { Dispatcher, filters } from '@mtcute/dispatcher';
+import { Dispatcher } from '@mtcute/dispatcher';
 import 'dotenv/config';
 import { apiHash, apiId, botApi, userId } from './api/index.js';
 import { deleteChannel, getChannelsData } from './data/index.js';
