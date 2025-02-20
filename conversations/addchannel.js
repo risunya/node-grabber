@@ -1,3 +1,4 @@
+import { groupId } from "../api/index.js";
 import { addChannel } from "../data/index.js";
 import { tg } from "../index.js";
 
@@ -11,6 +12,7 @@ const userConversation = async function (conversation, ctx) {
 
     const answerMessage = await conversation.wait();
     const text = answerMessage?.message?.text;
+		const forwardTo = groupId
 
     if (urlPattern.test(text)) {
       await ctx.reply(`Ты отправил ссылку! ` + text);
@@ -18,8 +20,8 @@ const userConversation = async function (conversation, ctx) {
 
       try {
         const e = await tg.resolveChannel(name);
-        const channelId = -1000000000000 - Number(e.channelId); // Преобразуем обратно
-        addChannel(name, text, channelId);
+        const channelId = (-1000000000000 - Number(e.channelId)).toFixed(0); // Преобразуем обратно
+        addChannel(name, text, channelId, forwardTo);
       } catch (err) {
         await ctx.reply(`Ошибка при получении данных: ${err.message}`);
       }
@@ -30,8 +32,8 @@ const userConversation = async function (conversation, ctx) {
 
       try {
         const e = await tg.resolveChannel(text);
-        const channelId = -1000000000000 - Number(e.channelId); // Преобразуем обратно
-        addChannel(text, url, channelId);
+        const channelId = (-1000000000000 - Number(e.channelId)).toFixed(0); // Преобразуем обратно
+        addChannel(text, url, channelId, forwardTo);
       } catch (err) {
         await ctx.reply(`Ошибка при получении данных: ${err.message}`);
       }

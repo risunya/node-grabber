@@ -2,7 +2,7 @@ import { SqliteStorage, TelegramClient } from '@mtcute/node';
 import { Bot } from "grammy"; 
 import { Dispatcher } from '@mtcute/dispatcher';
 import 'dotenv/config';
-import { apiHash, apiId, botApi, userId } from './api/index.js';
+import { apiHash, apiId, botApi, groupId, userId } from './api/index.js';
 import { deleteChannel, getChannelsData } from './data/index.js';
 import {
 	conversations,
@@ -43,13 +43,12 @@ dp.onNewMessage(async (msg) => {
     const channels = getChannelsData();
 
     const channel = channels.find(
-      (channel) => channel.id == `-100${msg.chat.inputPeer.channelId}`
+      (channel) => channel.channelId == `-100${msg.chat.inputPeer.channelId}`
     );
-
     if (channel) {
       try {
-        await msg.forwardTo({ toChatId: peer });
-        console.log(`Сообщение переслано из канала ${channel.id}`);
+				bot.api.sendMessage(groupId, `-100${msg.chat.inputPeer.channelId}`);
+        console.log(`Сообщение переслано из канала ${channel.channelId} в ${groupId}`);
       } catch (error) {
         console.error('Ошибка при пересылке сообщения:', error);
       }
