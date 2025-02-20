@@ -8,7 +8,7 @@ const createTableQuery = `
         name TEXT NOT NULL,
         link TEXT NOT NULL UNIQUE,
 				channelId TEXT NOT NULL UNIQUE,
-				forwardTo TEXT NOT NULL UNIQUE
+				forwardTo TEXT NOT NULL
     )
 `;
 

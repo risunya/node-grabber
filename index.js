@@ -8,11 +8,18 @@ import {
 	conversations,
 	createConversation,
 } from "@grammyjs/conversations";
-import { userConversation } from "./conversations/addchannel.js";
+import { 
+	deleteChannelConversation,
+	addChannelConversation,
+	currentChannelsConversation
+ } from './conversations/index.js';
+import { isUserName } from './utils/helpers.js';
 
 export const bot = new Bot(botApi); 
 bot.use(conversations())
-	 .use(createConversation(userConversation))
+	 .use(createConversation(addChannelConversation))
+	 .use(createConversation(deleteChannelConversation))
+	 .use(createConversation(currentChannelsConversation))
 
 
 export const tg = new TelegramClient({
@@ -57,10 +64,12 @@ dp.onNewMessage(async (msg) => {
 });
 
 	const channelsNames = getChannelsData()
-  .map((el) => el.name) // Преобразуем массив объектов в массив имен
+  .map((el) => el.name) 
   .join('\n');
-	await bot.api.sendMessage(userId, `Бот запущен! 🚀\n
-	Актуальный список отслеживаемых каналов на сегодня:\n${channelsNames}`);
+
+	const introText = `Бот запущен! 🚀\n` + 
+	(!channelsNames ? `В данный момент нет отслеживаемых каналов. Добавьте их с помощью команды /addchannel !` : `Актуальный список отслеживаемых каналов на сегодня:\n${channelsNames}`)
+	await bot.api.sendMessage(userId, introText);
 
 	await bot.api.setMyCommands([
 		{ command: "start", description: "Запустить бота" },
@@ -72,23 +81,25 @@ dp.onNewMessage(async (msg) => {
 
 
 bot.command("addchannel", async (ctx) => {
-	await ctx.conversation.enter('userConversation');
+	await ctx.conversation.enter('addChannelConversation');
   const item = ctx.match;
 	console.log(item);
 });
 
+
 bot.command("currentchannels", async (ctx) => {
-	let data = getChannelsData()
-	await ctx.reply(data.length == 0 ? 'В данный момент отслеживается 0 каналов.' :getChannelsData()) 
+	await ctx.conversation.enter('currentChannelsConversation');
 });
 
 bot.command("deletechannel", async (ctx) => {
   const channelName = ctx.match; 
-  if (!channelName) {
-    return ctx.reply('Пожалуйста, укажите имя канала. Например: /deletechannel ChannelName');
-  }
-  deleteChannel(channelName);
-  ctx.reply(`Канал "${channelName}" удален.`);
+	// если команда + название
+  if (isUserName(channelName)) {
+		deleteChannel(channelName);
+		ctx.reply(`Канал "${channelName}" удален.`);
+  } else {
+		await ctx.conversation.enter('deleteChannelConversation');
+	}
 });
 
 
