@@ -2,7 +2,7 @@ import { SqliteStorage, TelegramClient } from '@mtcute/node';
 import { Bot } from "grammy"; 
 import { Dispatcher } from '@mtcute/dispatcher';
 import 'dotenv/config';
-import { apiHash, apiId, botApi, groupId, userId } from './api/index.js';
+import { apiHash, apiId, botApi, userId } from './api/index.js';
 import { deleteChannel, getChannelsData } from './data/index.js';
 import {
 	conversations,
@@ -13,7 +13,8 @@ import {
 	addChannelConversation,
 	currentChannelsConversation
  } from './conversations/index.js';
-import { isUserName } from './utils/helpers.js';
+import { calculateChannelId, isTwoUsernames, isUserName } from './utils/helpers.js';
+import { addToDB } from './conversations/addchannel.js';
 
 export const bot = new Bot(botApi); 
 bot.use(conversations())
@@ -43,19 +44,18 @@ export const tg = new TelegramClient({
 
 
 const dp = new Dispatcher(tg);
-const peer = await tg.resolvePeer("me")
 
 dp.onNewMessage(async (msg) => {
   if (msg.chat.inputPeer._ === 'inputPeerChannel') {
+		const sendFrom = calculateChannelId(msg.chat.inputPeer.channelId)
     const channels = getChannelsData();
-
     const channel = channels.find(
-      (channel) => channel.channelId == `-100${msg.chat.inputPeer.channelId}`
+      (channel) => channel.channelIdFrom == sendFrom
     );
     if (channel) {
       try {
-				bot.api.sendMessage(groupId, `-100${msg.chat.inputPeer.channelId}`);
-        console.log(`Сообщение переслано из канала ${channel.channelId} в ${groupId}`);
+				bot.api.sendMessage(channel.channelIdTo, msg.text);
+        console.log(`Сообщение переслано из канала ${sendFrom} в ${channel.channelIdTo}`);
       } catch (error) {
         console.error('Ошибка при пересылке сообщения:', error);
       }
@@ -73,25 +73,29 @@ dp.onNewMessage(async (msg) => {
 
 	await bot.api.setMyCommands([
 		{ command: "start", description: "Запустить бота" },
-		{ command: "addchannel", description: "Добавить канал" },
-		{ command: "deletechannel", description: "Удалить канал" },
-		{ command: "editchannels", description: "Изменить канал" },
-		{ command: "currentchannels", description: "Текущие подписки" },
+		{ command: "add", description: "Добавить канал" },
+		{ command: "delete", description: "Удалить канал" },
+		{ command: "edit", description: "Изменить канал" },
+		{ command: "current", description: "Текущие подписки" },
 	]);
 
 
-bot.command("addchannel", async (ctx) => {
-	await ctx.conversation.enter('addChannelConversation');
-  const item = ctx.match;
-	console.log(item);
+bot.command("add", async (ctx) => {
+	const shortcut = ctx.match;
+	const [channelNameFrom, channelNameTo] = shortcut.replace(/ /g,'').split(",");
+	if (isTwoUsernames(shortcut)) {
+		addToDB(ctx, channelNameFrom, channelNameTo)
+	} else {
+		await ctx.conversation.enter('addChannelConversation');
+	}
 });
 
 
-bot.command("currentchannels", async (ctx) => {
+bot.command("current", async (ctx) => {
 	await ctx.conversation.enter('currentChannelsConversation');
 });
 
-bot.command("deletechannel", async (ctx) => {
+bot.command("delete", async (ctx) => {
   const channelName = ctx.match; 
 	// если команда + название
   if (isUserName(channelName)) {
@@ -101,9 +105,6 @@ bot.command("deletechannel", async (ctx) => {
 		await ctx.conversation.enter('deleteChannelConversation');
 	}
 });
-
-
-
 
 
 bot.start();

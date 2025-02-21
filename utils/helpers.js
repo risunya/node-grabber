@@ -19,10 +19,15 @@ const isUserName = (e) => {
 	return e.startsWith('@');
 }
 
+const isTwoUsernames = (e) => {
+	const regex = /^@[^,]+,@[^,]+$/;;
+	return regex.test(e.replace(/ /g,''));
+}
 export {
 	linkToUserName,
 	userNameToLink,
 	calculateChannelId,
 	isUrl,
-	isUserName
+	isUserName,
+	isTwoUsernames
 }
