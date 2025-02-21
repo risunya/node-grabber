@@ -37,7 +37,7 @@ npm install
 ## Как запустить
 Создайте Telegram-бота. Для этого напишите боту [BotFather](https://t.me/BotFather) и следуйте инструкциям. После создания сохраните токен бота.
 
-Получите **API_ID** и **API_HASH**. Сделать это можно на сайте my.telegram.org (инструкция).
+Получите **API_ID** и **API_HASH**. Сделать это можно на сайте [my.telegram.org](https://my.telegram.org/auth) - [инструкция](https://www.youtube.com/watch?v=JBDnmEhvgac).
 Создайте файл **.env** в корне проекта и укажите в нем переменные:
 ```
 API_ID="ваш_api_id"
