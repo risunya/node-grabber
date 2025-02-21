@@ -1,15 +1,21 @@
 import { getChannelsData } from "../data/index.js"
 
-const currentChannelsConversation = async function (conversation, ctx) {
+const sendCurrentChannels = () => {
 	const data = getChannelsData()
-	const text = (data.length == 0 ? 'В данный момент отслеживается 0 каналов.' : data
-		//(data.map((e) => {
-		//	return `Канал ${e.name} перенаправляем в ${e.forwardTo}\n` 
-		//}).toString()).replace(/,/g, '')
+	const text = (data.length == 0 ? 'В данный момент отслеживается 0 каналов.' : 
+		(data.map((e) => {
+			return `Канал ${e.channelNameFrom} -> ( ${(e.channelNameTo).split(',').map((el) => {
+				return (el + ' ')
+			})})\n` 
+		}).toString()).replace(/,/g, '')
 	)
-	await ctx.reply(text) 
+	return text 
+}
+const currentChannelsConversation = async function (conversation, ctx) {
+	ctx.reply(sendCurrentChannels())
 }
 
 export {
-	currentChannelsConversation
+	currentChannelsConversation,
+	sendCurrentChannels
 }

@@ -15,6 +15,7 @@ import {
  } from './conversations/index.js';
 import { calculateChannelId, isTwoUsernames, isUserName } from './utils/helpers.js';
 import { addToDB } from './conversations/addchannel.js';
+import { sendCurrentChannels } from './conversations/currentchannels.js';
 
 export const bot = new Bot(botApi); 
 bot.use(conversations())
@@ -54,8 +55,18 @@ dp.onNewMessage(async (msg) => {
     );
     if (channel) {
       try {
-				bot.api.sendMessage(channel.channelIdTo, msg.text);
-        console.log(`Сообщение переслано из канала ${sendFrom} в ${channel.channelIdTo}`);
+				const ids = channel.channelIdTo.split(',')
+				if (ids.length == 1) {
+					bot.api.sendMessage(ids[0], msg.text + `\n\n«${msg.chat.title}»`);
+					console.log(`Сообщение переслано из канала ${sendFrom} в ${channel.channelIdTo}`);
+				} else {
+					for (const id of ids) {
+						bot.api.sendMessage(id, msg.text + `\n\n«${msg.chat.title}»`);
+						
+						console.log(`Сообщение переслано из канала ${sendFrom} в ${id}`);
+					}
+				}
+				
       } catch (error) {
         console.error('Ошибка при пересылке сообщения:', error);
       }
@@ -63,26 +74,22 @@ dp.onNewMessage(async (msg) => {
   }
 });
 
-	const channelsNames = getChannelsData()
-  .map((el) => el.name) 
-  .join('\n');
-
-	const introText = `Бот запущен! 🚀\n` + 
-	(!channelsNames ? `В данный момент нет отслеживаемых каналов. Добавьте их с помощью команды /addchannel !` : `Актуальный список отслеживаемых каналов на сегодня:\n${channelsNames}`)
+	const introText = `Бот запущен! 🚀\n\n` + 
+	(!sendCurrentChannels() ? `В данный момент нет отслеживаемых каналов. Добавьте их с помощью команды /add !` : `Актуальный список отслеживаемых каналов:\n${sendCurrentChannels()}`)
 	await bot.api.sendMessage(userId, introText);
 
 	await bot.api.setMyCommands([
 		{ command: "start", description: "Запустить бота" },
 		{ command: "add", description: "Добавить канал" },
-		{ command: "delete", description: "Удалить канал" },
-		{ command: "edit", description: "Изменить канал" },
-		{ command: "current", description: "Текущие подписки" },
+		{ command: "del", description: "Удалить канал" },
+		{ command: "cur", description: "Текущие подписки" },
 	]);
 
 
 bot.command("add", async (ctx) => {
 	const shortcut = ctx.match;
-	const [channelNameFrom, channelNameTo] = shortcut.replace(/ /g,'').split(",");
+	const [channelNameFrom, channelNameTo] = shortcut.split(' ');
+
 	if (isTwoUsernames(shortcut)) {
 		addToDB(ctx, channelNameFrom, channelNameTo)
 	} else {
@@ -91,11 +98,11 @@ bot.command("add", async (ctx) => {
 });
 
 
-bot.command("current", async (ctx) => {
+bot.command("cur", async (ctx) => {
 	await ctx.conversation.enter('currentChannelsConversation');
 });
 
-bot.command("delete", async (ctx) => {
+bot.command("del", async (ctx) => {
   const channelName = ctx.match; 
 	// если команда + название
   if (isUserName(channelName)) {
