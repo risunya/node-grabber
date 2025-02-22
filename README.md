@@ -50,7 +50,7 @@ USER_ID="ваш_user_id"
 Для **запуска бота** выполните команду:
 
 ```
-npm run dev
+npm run start
 ```
 Или запустите **start.bat** ;)
 
