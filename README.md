@@ -21,11 +21,11 @@ Node.js обычно устанавливается через MSI-файл ([с
 # Скачать и установить Chocolatey:
 powershell -c "irm https://community.chocolatey.org/install.ps1 | iex"
 # Скачать и установить Node.js:
-choco install nodejs-lts --version="22"
+choco install nodejs-lts --version="20"
 # Проверить версию Node.js:
-node -v # Должно вывести "v22.14.0".
+node -v # Должно вывести "v20.18.3".
 # Проверить версию npm:
-npm -v # Должно вывести "10.9.2".
+npm -v # Должно вывести "10.8.2".
 ```
 После установки среды выполнения и npm необходимо загрузить зависимости. Для этого в корневой папке проекта выполните команду:
 
