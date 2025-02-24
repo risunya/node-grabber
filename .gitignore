@@ -26,5 +26,8 @@ dist-ssr
 
 .vercel
 
-auth/*
+auth/hash.session
+auth/hash.session-shm
+auth/hash.session-wal
+
 data/channels.db
