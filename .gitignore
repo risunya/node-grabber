@@ -28,3 +28,4 @@ dist-ssr
 
 auth/*
 data/channels.db
+data/settings.db

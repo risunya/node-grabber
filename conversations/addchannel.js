@@ -64,16 +64,18 @@ const addChannelConversation = async function (conversation, ctx) {
     } else if (isUserName(channelNameFrom)) {
       const url = userNameToLink(channelNameFrom);
 
-      await ctx.reply(`Ты отправил юзернейм\n` + channelNameFrom + ` (${url})\n` + `Теперь отправь юзернейм или id канала, куда бот будет пересылать данную новость! Если ты хочешь пероесылать новость в несколько каналов сразу, то напиши каналы через запятую: @novostigrabber,@nodegrabber !`, 
+      await ctx.reply(`Ты отправил юзернейм\n` + channelNameFrom + ` (${url})\n` + `Теперь отправь юзернейм или id канала, куда бот будет пересылать данную новость!\n\nЕсли ты хочешь пересылать новость в несколько каналов сразу, то напиши каналы через запятую: @novostigrabber,@nodegrabber !`, 
 				{link_preview_options: {is_disabled: true}},
 			);
 			const secondAnswerMessage = await conversation.wait();
 			const channelNameTo = secondAnswerMessage?.message?.text;
 			
 			if (isUserName(channelNameTo)) {
+				await ctx.reply('Запись добавлена!')
 				await addToDB(ctx, channelNameFrom, channelNameTo)
 				break;
 			} else {
+				await ctx.reply('Запись добавлена!')
 				await addToDB(ctx, channelNameFrom, channelNameTo)
 				break;
 			}
