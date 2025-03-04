@@ -57,18 +57,19 @@ dp.onNewMessage(async (msg) => {
     if (channel) {
       try {
         const ids = channel.channelIdTo.split(',');
+
         const quotingEnabled = getSettingsValue('quoting');
         const logEnabled = getSettingsValue('logs');
 
         if (ids.length == 1) {
-          const message = `${msg.text}\n\n«${quotingEnabled ? msg.chat.title : userNameToLink(msg.chat.username)}»`;
-          bot.api.sendMessage(ids[0], message);
+          const message = `${msg.text}\n\n<a href="${quotingEnabled ? userNameToLink(msg.chat.username) : ''}">«${msg.chat.title}»</a>`
+          bot.api.sendMessage(ids[0], message, { parse_mode: "HTML" });
           logEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в ${channel.channelIdTo}`);
         } else {
           for (const id of ids) {
-            const message = `${msg.text}\n\n[«${msg.chat.title}»](${userNameToLink(msg.chat.username)})`;
+            const message = `${msg.text}\n\n<a href="${quotingEnabled ? userNameToLink(msg.chat.username) : ''}">«${msg.chat.title}»</a>`
             if (quotingEnabled) {
-              bot.api.sendMessage(id, message, { parse_mode: "MarkdownV2" });
+              bot.api.sendMessage(id, message, { parse_mode: "HTML" });
             } else {
               bot.api.sendMessage(id, `${msg.text}\n\n«${msg.chat.title}»`);
             }
