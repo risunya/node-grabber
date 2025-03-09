@@ -29,8 +29,10 @@ bot.use(conversations())
 export const tg = new TelegramClient({
   apiId: apiId,
   apiHash: apiHash,
-  storage: new SqliteStorage('./auth/hash.session')
-});
+  storage: new SqliteStorage('./auth/hash.session'),
+	updates: {
+		messageGroupingInterval: 1000,
+}});
 
 (async () => {
   try {
@@ -49,6 +51,35 @@ export const tg = new TelegramClient({
 const dp = new Dispatcher(tg);
 
 dp.onNewMessage(
+  filters.photo,
+  async (msg) => {
+    if (msg.chat.inputPeer._ === 'inputPeerChannel') {
+      const sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
+      const channels = getChannelsData();
+      const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
+
+      if (channel) {
+        try {
+          const ids = channel.channelIdTo.split(',');
+          const quotingEnabled = getSettingsValue('quoting');
+          const logEnabled = getSettingsValue('logs');
+
+          // Отправляем только одно изображение
+          if (msg.media?.id) {
+            for (const id of ids) {
+              sendMedia(msg, id, logEnabled, quotingEnabled, sendFrom);
+            }
+          }
+        } catch (error) {
+          console.error('Ошибка при пересылке фото:', error);
+        }
+      }
+    }
+  }
+);
+
+
+dp.onNewMessage(
   filters.not(filters.photo),
   async (msg) => {
     if (msg.chat.inputPeer._ === 'inputPeerChannel') {
@@ -62,7 +93,6 @@ dp.onNewMessage(
           const quotingEnabled = getSettingsValue('quoting');
           const logEnabled = getSettingsValue('logs');
           
-          // Сообщения отправляются в несколько чатов
           if (ids.length == 1) {
             setTimeout(() => {
               msg.copy({ toChatId: Number(ids[0]), noAuthor: !quotingEnabled });
@@ -85,17 +115,16 @@ dp.onNewMessage(
 );
 
 //media 
-
 const sendMedia = (msg, id, logsEnabled, quotingEnabled, sendFrom) => {
   setTimeout(() => {
-		msg.copy({ toChatId: Number(id), noAuthor: !quotingEnabled });
+		msg.forwardTo({ toChatId: Number(id), noAuthor: !quotingEnabled});
   }, 500);
   logsEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в ${id}`);
 }
 
-dp.onNewMessage(
-  filters.media,
+dp.onMessageGroup(
   async (msg) => {
+
     if (msg.chat.inputPeer._ === 'inputPeerChannel') {
       const sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
       const channels = getChannelsData();
