@@ -1,6 +1,6 @@
 import { SqliteStorage, TelegramClient } from '@mtcute/node';
 import { Bot } from "grammy"; 
-import { Dispatcher } from '@mtcute/dispatcher';
+import { Dispatcher, filters } from '@mtcute/dispatcher';
 import 'dotenv/config';
 import { apiHash, apiId, botApi, userId } from './api/index.js';
 import { deleteChannel, getChannelsData, getSettingsValue, updateSettings } from './data/index.js';
@@ -48,42 +48,80 @@ export const tg = new TelegramClient({
 
 const dp = new Dispatcher(tg);
 
-dp.onNewMessage(async (msg) => {
-  if (msg.chat.inputPeer._ === 'inputPeerChannel') {
-    const sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
-    const channels = getChannelsData();
-    const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
+dp.onNewMessage(
+  filters.not(filters.photo),
+  async (msg) => {
+    if (msg.chat.inputPeer._ === 'inputPeerChannel') {
+      const sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
+      const channels = getChannelsData();
+      const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
 
-    if (channel) {
-      try {
-        const ids = channel.channelIdTo.split(',');
-
-        const quotingEnabled = getSettingsValue('quoting');
-        const logEnabled = getSettingsValue('logs');
-
-        if (ids.length == 1) {
-          const message = `${msg.text}\n\n<a href="${quotingEnabled ? userNameToLink(msg.chat.username) : ''}">«${msg.chat.title}»</a>`
-          bot.api.sendMessage(ids[0], message, { parse_mode: "HTML" });
-          logEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в ${channel.channelIdTo}`);
-        } else {
-          for (const id of ids) {
-            const message = `${msg.text}\n\n<a href="${quotingEnabled ? userNameToLink(msg.chat.username) : ''}">«${msg.chat.title}»</a>`
-            if (quotingEnabled) {
-              bot.api.sendMessage(id, message, { parse_mode: "HTML" });
-            } else {
-              bot.api.sendMessage(id, `${msg.text}\n\n«${msg.chat.title}»`);
+      if (channel) {
+        try {
+          const ids = channel.channelIdTo.split(',');
+          const quotingEnabled = getSettingsValue('quoting');
+          const logEnabled = getSettingsValue('logs');
+          
+          // Сообщения отправляются в несколько чатов
+          if (ids.length == 1) {
+            setTimeout(() => {
+              msg.copy({ toChatId: Number(ids[0]), noAuthor: !quotingEnabled });
+            }, 500);
+            logEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в nodegrabber`);
+          } else {
+            for (const id of ids) {
+              setTimeout(() => {
+                msg.copy({ toChatId: Number(id), noAuthor: !quotingEnabled });
+              }, 500);
+              logEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в ${id}`);
             }
-            logEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в ${channel.channelIdTo}`);
           }
+        } catch (error) {
+          console.error('Ошибка при пересылке сообщения:', error);
         }
-
-      } catch (error) {
-        console.error('Ошибка при пересылке сообщения:', error);
       }
     }
   }
-});
+);
 
+//media 
+
+const sendMedia = (msg, id, logsEnabled, quotingEnabled, sendFrom) => {
+  setTimeout(() => {
+		msg.copy({ toChatId: Number(id), noAuthor: !quotingEnabled });
+  }, 500);
+  logsEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в ${id}`);
+}
+
+dp.onNewMessage(
+  filters.media,
+  async (msg) => {
+    if (msg.chat.inputPeer._ === 'inputPeerChannel') {
+      const sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
+      const channels = getChannelsData();
+      const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
+
+      if (channel) {
+        try {
+          const ids = channel.channelIdTo.split(',');
+          const quotingEnabled = getSettingsValue('quoting');
+          const logEnabled = getSettingsValue('logs');
+
+          if (ids.length == 1) {
+            sendMedia(msg, ids[0], logEnabled, quotingEnabled, sendFrom);
+          } else {
+            for (const id of ids) {
+              sendMedia(msg, id, logEnabled, quotingEnabled, sendFrom);
+            }
+          }
+
+        } catch (error) {
+          console.error('Ошибка при пересылке сообщения:', error);
+        }
+      }
+    }
+  }
+);
 
 	const introText = `Бот запущен! 🚀\n\n` + 
 	(!sendCurrentChannels() ? `В данный момент нет отслеживаемых каналов. Добавьте их с помощью команды /add !` : `Актуальный список отслеживаемых каналов:\n${sendCurrentChannels()}`)
