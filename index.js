@@ -95,13 +95,13 @@ dp.onNewMessage(
           
           if (ids.length == 1) {
             setTimeout(() => {
-              msg.copy({ toChatId: Number(ids[0]), noAuthor: !quotingEnabled });
+              msg.forwardTo({ toChatId: Number(ids[0]), noAuthor: !quotingEnabled });
             }, 500);
             logEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в nodegrabber`);
           } else {
             for (const id of ids) {
               setTimeout(() => {
-                msg.copy({ toChatId: Number(id), noAuthor: !quotingEnabled });
+                msg.forwardTo({ toChatId: Number(id), noAuthor: !quotingEnabled });
               }, 500);
               logEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в ${id}`);
             }
