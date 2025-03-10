@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { joinChats } from '../index.js';
 
 const db = new Database('./data/channels.db');
 const sdb = new Database('./data/settings.db');
@@ -41,6 +42,7 @@ const getChannelsData = () => {
 const addChannel = async (ctx, channelNameFrom, linkFrom, channelIdFrom, channelNameTo, linkTo, channelIdTo) => {
 	try {
 		insert.run(channelNameFrom, linkFrom, channelIdFrom, channelNameTo, linkTo.toString(), channelIdTo.toString())
+		joinChats()
 	} catch (error) {
 		ctx.reply('Кажется, что такая запись уже существует!')
 	}
@@ -66,6 +68,7 @@ const searchByKey = sdb.prepare('SELECT * FROM settings WHERE key = ?');
 const getSettingsValue = (key) => {
 	return searchByKey.get(key).value ? 1 : 0
 }
+
 
 export {
 	db,

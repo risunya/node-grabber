@@ -31,7 +31,7 @@ export const tg = new TelegramClient({
   apiHash: apiHash,
   storage: new SqliteStorage('./auth/hash.session'),
 	updates: {
-		messageGroupingInterval: 1000,
+		messageGroupingInterval: 250,
 }});
 
 (async () => {
@@ -41,14 +41,24 @@ export const tg = new TelegramClient({
 			code: () => tg.input('Code > '),
 			password: () => tg.input('Password > ')
 		}); 
+		joinChats()
     console.log(`Logged in as ${self.displayName}`);
   } catch (error) {
     console.error('Failed to start client:', error);
   }
 })();
 
-
 const dp = new Dispatcher(tg);
+
+export async function joinChats() {
+	const channels = getChannelsData()
+	for (let channel of channels) {
+		const channelName = (channel.channelNameFrom).replace('@','')
+		await tg.closeChat(channelName);
+		await tg.openChat(channelName);
+	}
+}
+
 
 dp.onNewMessage(
   filters.photo,
@@ -56,7 +66,7 @@ dp.onNewMessage(
     if (msg.chat.inputPeer._ === 'inputPeerChannel') {
       const sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
       const channels = getChannelsData();
-      const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
+			const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
 
       if (channel) {
         try {
@@ -97,7 +107,7 @@ dp.onNewMessage(
             setTimeout(() => {
               msg.forwardTo({ toChatId: Number(ids[0]), noAuthor: !quotingEnabled });
             }, 500);
-            logEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в nodegrabber`);
+            logEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в ${ids[0]}`);
           } else {
             for (const id of ids) {
               setTimeout(() => {
