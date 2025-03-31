@@ -92,37 +92,37 @@ dp.onNewMessage(
 dp.onNewMessage(
   filters.not(filters.photo),
   async (msg) => {
-    if (msg.chat.inputPeer._ === 'inputPeerChannel') {
-      const sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
-      const channels = getChannelsData();
-      const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
+    let sendFrom;
 
-      if (channel) {
-        try {
-          const ids = channel.channelIdTo.split(',');
-          const quotingEnabled = getSettingsValue('quoting');
-          const logEnabled = getSettingsValue('logs');
-          
-          if (ids.length == 1) {
-            setTimeout(() => {
-              msg.forwardTo({ toChatId: Number(ids[0]), noAuthor: !quotingEnabled });
-            }, 500);
-            logEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в ${ids[0]}`);
-          } else {
-            for (const id of ids) {
-              setTimeout(() => {
-                msg.forwardTo({ toChatId: Number(id), noAuthor: !quotingEnabled });
-              }, 500);
-              logEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в ${id}`);
-            }
-          }
-        } catch (error) {
-          console.error('Ошибка при пересылке сообщения:', error);
-        }
-      }
+    if (msg.chat.inputPeer._ === 'inputPeerChannel') {
+      sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
+    } else if (msg.chat.inputPeer._ === 'inputPeerUser' && msg.chat.isBot && !msg.sender.isSelf) {
+      sendFrom = msg.chat.id
+    } else {
+      return;
+    }
+
+    const channels = getChannelsData();
+    const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
+    if (!channel) return;
+
+    try {
+      const ids = channel.channelIdTo.split(',');
+      const quotingEnabled = getSettingsValue('quoting');
+      const logEnabled = getSettingsValue('logs');
+
+      ids.forEach((id) => {
+        setTimeout(() => {
+          msg.forwardTo({ toChatId: Number(id), noAuthor: !quotingEnabled });
+          logEnabled && console.log(`Сообщение переслано из ${sendFrom} в ${id}`);
+        }, 500);
+      });
+    } catch (error) {
+      console.error('Ошибка при пересылке сообщения:', error);
     }
   }
 );
+
 
 //media 
 const sendMedia = (msg, id, logsEnabled, quotingEnabled, sendFrom) => {

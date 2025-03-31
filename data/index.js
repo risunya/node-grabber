@@ -41,7 +41,7 @@ const getChannelsData = () => {
 
 const addChannel = async (ctx, channelNameFrom, linkFrom, channelIdFrom, channelNameTo, linkTo, channelIdTo) => {
 	try {
-		insert.run(channelNameFrom, linkFrom, channelIdFrom, channelNameTo, linkTo.toString(), channelIdTo.toString())
+		insert.run(channelNameFrom, linkFrom, String(channelIdFrom), channelNameTo, linkTo.toString(), channelIdTo.toString())
 		joinChats()
 	} catch (error) {
 		ctx.reply('Кажется, что такая запись уже существует!')

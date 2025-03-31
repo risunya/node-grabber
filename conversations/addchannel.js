@@ -5,8 +5,15 @@ import { calculateChannelId, isUrl, isUserName, linkToUserName, userNameToLink }
 const addToDB = async (ctx, channelNameFrom, channelNameTo) => {
 	channelNameTo.toString()
 	try {
-		const e = await tg.resolveChannel(channelNameFrom);
-		const channelIdFrom = calculateChannelId(e.channelId)
+		let e = ''
+		let channelIdFrom = 0
+		if (channelNameFrom.includes('bot')) {
+			e = await tg.getUser(channelNameFrom);
+			channelIdFrom = e.id
+		} else {
+			e = await tg.resolveChannel(channelNameFrom);
+			channelIdFrom = calculateChannelId(e.channelId)
+		}
 		const linkFrom = userNameToLink(channelNameFrom)
 
 		let channelIdTo = []
