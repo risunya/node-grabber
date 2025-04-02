@@ -7,7 +7,7 @@ const addToDB = async (ctx, channelNameFrom, channelNameTo) => {
 	try {
 		let e = ''
 		let channelIdFrom = 0
-		if (channelNameFrom.includes('bot')) {
+		if ((channelNameFrom.toLowerCase()).includes('bot')) {
 			e = await tg.getUser(channelNameFrom);
 			channelIdFrom = e.id
 		} else {
