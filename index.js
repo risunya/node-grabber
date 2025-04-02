@@ -60,107 +60,41 @@ export async function joinChats() {
 }
 
 
-dp.onNewMessage(
-  filters.photo,
-  async (msg) => {
-    if (msg.chat.inputPeer._ === 'inputPeerChannel') {
-      const sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
-      const channels = getChannelsData();
-			const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
+const forwardMessage = async (msg) => {
+  let sendFrom;
 
-      if (channel) {
-        try {
-          const ids = channel.channelIdTo.split(',');
-          const quotingEnabled = getSettingsValue('quoting');
-          const logEnabled = getSettingsValue('logs');
-
-          // Отправляем только одно изображение
-          if (msg.media?.id) {
-            for (const id of ids) {
-              sendMedia(msg, id, logEnabled, quotingEnabled, sendFrom);
-            }
-          }
-        } catch (error) {
-          console.error('Ошибка при пересылке фото:', error);
-        }
-      }
-    }
+  if (msg.chat.inputPeer._ === 'inputPeerChannel') {
+    sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
+  } else if (msg.chat.inputPeer._ === 'inputPeerUser' && msg.chat.isBot && !msg.sender.isSelf) {
+    sendFrom = msg.chat.id;
+  } else {
+    return;
   }
-);
 
+  const channels = getChannelsData();
+  const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
+  if (!channel) return;
 
-dp.onNewMessage(
-  filters.not(filters.photo),
-  async (msg) => {
-    let sendFrom;
+  try {
+    const ids = channel.channelIdTo.split(',');
+    const quotingEnabled = getSettingsValue('quoting');
+    const logEnabled = getSettingsValue('logs');
 
-    if (msg.chat.inputPeer._ === 'inputPeerChannel') {
-      sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
-    } else if (msg.chat.inputPeer._ === 'inputPeerUser' && msg.chat.isBot && !msg.sender.isSelf) {
-      sendFrom = msg.chat.id
-    } else {
-      return;
-    }
-
-    const channels = getChannelsData();
-    const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
-    if (!channel) return;
-
-    try {
-      const ids = channel.channelIdTo.split(',');
-      const quotingEnabled = getSettingsValue('quoting');
-      const logEnabled = getSettingsValue('logs');
-
-      ids.forEach((id) => {
-        setTimeout(() => {
-          msg.forwardTo({ toChatId: Number(id), noAuthor: !quotingEnabled });
-          logEnabled && console.log(`Сообщение переслано из ${sendFrom} в ${id}`);
-        }, 500);
-      });
-    } catch (error) {
-      console.error('Ошибка при пересылке сообщения:', error);
-    }
+    ids.forEach((id) => {
+      setTimeout(() => {
+        msg.forwardTo({ toChatId: Number(id), noAuthor: !quotingEnabled });
+        logEnabled && console.log(`Сообщение переслано из ${sendFrom} в ${id}`);
+      }, 500);
+    });
+  } catch (error) {
+    console.error('Ошибка при пересылке сообщения:', error);
   }
-);
+};
 
+dp.onNewMessage(filters.photo, forwardMessage);
+dp.onNewMessage(filters.not(filters.photo), forwardMessage);
+dp.onMessageGroup(forwardMessage);
 
-//media 
-const sendMedia = (msg, id, logsEnabled, quotingEnabled, sendFrom) => {
-  setTimeout(() => {
-		msg.forwardTo({ toChatId: Number(id), noAuthor: !quotingEnabled});
-  }, 500);
-  logsEnabled && console.log(`Сообщение переслано из канала ${sendFrom} в ${id}`);
-}
-
-dp.onMessageGroup(
-  async (msg) => {
-
-    if (msg.chat.inputPeer._ === 'inputPeerChannel') {
-      const sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
-      const channels = getChannelsData();
-      const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
-
-      if (channel) {
-        try {
-          const ids = channel.channelIdTo.split(',');
-          const quotingEnabled = getSettingsValue('quoting');
-          const logEnabled = getSettingsValue('logs');
-
-          if (ids.length == 1) {
-            sendMedia(msg, ids[0], logEnabled, quotingEnabled, sendFrom);
-          } else {
-            for (const id of ids) {
-              sendMedia(msg, id, logEnabled, quotingEnabled, sendFrom);
-            }
-          }
-
-        } catch (error) {
-          console.error('Ошибка при пересылке сообщения:', error);
-        }
-      }
-    }
-  }
-);
 
 	const introText = `Бот запущен! 🚀\n\n` + 
 	(!sendCurrentChannels() ? `В данный момент нет отслеживаемых каналов. Добавьте их с помощью команды /add !` : `Актуальный список отслеживаемых каналов:\n${sendCurrentChannels()}`)
