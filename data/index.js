@@ -11,7 +11,8 @@ const createTableQuery = `
 				channelIdFrom TEXT NOT NULL UNIQUE,
 				channelNameTo TEXT NOT NULL,
 				linkTo TEXT NOT NULL,
-				channelIdTo TEXT NOT NULL
+				channelIdTo TEXT NOT NULL,
+				filterWords TEXT
     )
 `;
 
@@ -31,7 +32,7 @@ db.exec(createTableQuery);
 sdb.exec(createSettingsTableQuery);
 
 // Работа с channels (db)
-const insert = db.prepare('INSERT INTO channels (channelNameFrom, linkFrom, channelIdFrom, channelNameTo, linkTo, channelIdTo) VALUES (?, ?, ?, ?, ?, ?)');
+const insert = db.prepare('INSERT INTO channels (channelNameFrom, linkFrom, channelIdFrom, channelNameTo, linkTo, channelIdTo, filterWords) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
 const deleteByName = db.prepare('DELETE FROM channels WHERE channelNameFrom = ?');
 
@@ -39,9 +40,9 @@ const getChannelsData = () => {
 	return db.prepare('SELECT * FROM channels').all()
 }
 
-const addChannel = async (ctx, channelNameFrom, linkFrom, channelIdFrom, channelNameTo, linkTo, channelIdTo) => {
+const addChannel = async (ctx, channelNameFrom, linkFrom, channelIdFrom, channelNameTo, linkTo, channelIdTo, filterWords) => {
 	try {
-		insert.run(channelNameFrom, linkFrom, String(channelIdFrom), channelNameTo, linkTo.toString(), channelIdTo.toString())
+		insert.run(channelNameFrom, linkFrom, String(channelIdFrom), channelNameTo, linkTo.toString(), channelIdTo.toString(), filterWords)
 		joinChats()
 	} catch (error) {
 		ctx.reply('Кажется, что такая запись уже существует!')

@@ -6,7 +6,7 @@ const sendCurrentChannels = () => {
 		(data.map((e) => {
 			return `Канал ${e.channelNameFrom} -> ( ${(e.channelNameTo).split(',').map((el) => {
 				return (el + ' ')
-			})})\n` 
+			})})\n Исключения: (${e.filterWords})\n` 
 		}).toString()).replace(/,/g, '')
 	)
 	return text 

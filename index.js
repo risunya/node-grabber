@@ -2,7 +2,7 @@ import { SqliteStorage, TelegramClient } from '@mtcute/node';
 import { Bot } from "grammy"; 
 import { Dispatcher, filters } from '@mtcute/dispatcher';
 import 'dotenv/config';
-import { apiHash, apiId, botApi, userId } from './api/index.js';
+import { apiHash, apiId, botApi, userId, devUserId } from './api/index.js';
 import { deleteChannel, getChannelsData, getSettingsValue, updateSettings } from './data/index.js';
 import {
 	conversations,
@@ -13,12 +13,56 @@ import {
 	addChannelConversation,
 	currentChannelsConversation
  } from './conversations/index.js';
-import { calculateChannelId, isTwoUsernames, isUserName, userNameToLink } from './utils/helpers.js';
+import { calculateChannelId, isTwoUsernames, isUserName } from './utils/helpers.js';
 import { addToDB } from './conversations/addchannel.js';
 import { sendCurrentChannels } from './conversations/currentchannels.js';
 import { sendCurrentSettings, settingsConversation } from './conversations/settings.js';
 
+
 export const bot = new Bot(botApi); 
+
+bot.command("crash", (ctx) => {
+  // Искусственно вызываем ошибку, аналогичную ECONNRESET
+  const err = new Error("Simulated ECONNRESET");
+  // Добавим код ошибки
+  // @ts-ignore
+  err.code = "ECONNRESET";
+  throw err;
+});
+
+bot.use(async (ctx, next) => {
+  const userId = Number(process.env.USER_ID);
+  
+  if (ctx.chat?.type == "private" && ctx.from?.id !== userId) {
+    return ctx.reply("Извините, вы не авторизованы для использования этого бота.");
+  }
+
+  await next();
+});
+
+
+let isBotEnabled = true; 
+ 
+// Команда /on
+  bot.command("on", async (ctx) => {
+    if (isBotEnabled) {
+      await ctx.reply("Бот уже включен!");
+      return;
+    }
+    isBotEnabled = true;
+		ctx.reply("Включен!");
+  });
+
+  // Команда /off
+  bot.command("off", async (ctx) => {
+    if (!isBotEnabled) {
+      await ctx.reply("Бот уже выключен!");
+      return;
+    }
+    isBotEnabled = false;
+		ctx.reply("Выключен.");
+  });
+
 bot.use(conversations())
 	 .use(createConversation(addChannelConversation))
 	 .use(createConversation(deleteChannelConversation))
@@ -59,35 +103,52 @@ export async function joinChats() {
 	}
 }
 
-
 const forwardMessage = async (msg) => {
+		if (!isBotEnabled) {
+      return;
+  }
+  // Определение источника сообщения
   let sendFrom;
-
-  if (msg.chat.inputPeer._ === 'inputPeerChannel') {
+  if (msg.chat?.inputPeer?._ === 'inputPeerChannel') {
     sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
-  } else if (msg.chat.inputPeer._ === 'inputPeerUser' && msg.chat.isBot && !msg.sender.isSelf) {
+  } else if (msg.chat?.inputPeer?._ === 'inputPeerUser' && msg.chat.isBot && !msg.sender?.isSelf) {
     sendFrom = msg.chat.id;
   } else {
     return;
   }
 
-  const channels = getChannelsData();
-  const channel = channels.find((channel) => channel.channelIdFrom == sendFrom);
+  // Поиск канала
+  const channel = getChannelsData().find((ch) => ch.channelIdFrom === sendFrom);
   if (!channel) return;
 
+  // Проверка фильтров
+  const messageText = msg.text?.toLowerCase() || '';
+  const filterWords = channel.filterWords ? channel.filterWords.split(',').map(word => word.trim().toLowerCase()) : [];
+  if (filterWords.some(word => messageText.includes(word))) {
+    if (getSettingsValue('logs')) {
+      console.log(`Сообщение из ${sendFrom} отфильтровано. Содержит слова: ${filterWords.join(', ')}`);
+    }
+    return;
+  }
+
+  // Пересылка сообщения
   try {
-    const ids = channel.channelIdTo.split(',');
+    const channelIds = channel.channelIdTo.split(',').map(id => Number(id.trim()));
     const quotingEnabled = getSettingsValue('quoting');
     const logEnabled = getSettingsValue('logs');
 
-    ids.forEach((id) => {
-      setTimeout(() => {
-        msg.forwardTo({ toChatId: Number(id), noAuthor: !quotingEnabled });
-        logEnabled && console.log(`Сообщение переслано из ${sendFrom} в ${id}`);
-      }, 500);
-    });
+    await Promise.all(channelIds.map(async (id) => {
+      try {
+        await msg.forwardTo({ toChatId: id, noAuthor: !quotingEnabled });
+        if (logEnabled) {
+          console.log(`Сообщение переслано из ${sendFrom} в ${id}`);
+        }
+      } catch (error) {
+        console.error(`Ошибка пересылки в ${id}: ${error.message}`);
+      }
+    }));
   } catch (error) {
-    console.error('Ошибка при пересылке сообщения:', error);
+    console.error(`Общая ошибка пересылки: ${error.message}`);
   }
 };
 
@@ -110,6 +171,10 @@ dp.onMessageGroup(forwardMessage);
 
 
 bot.command("add", async (ctx) => {
+	if (!isBotEnabled) {
+      ctx.reply("Бот выключен :(");
+      return;
+  }
 	const shortcut = ctx.match;
 	const [channelNameFrom, channelNameTo] = shortcut.split(' ');
 
@@ -121,10 +186,18 @@ bot.command("add", async (ctx) => {
 });
 
 bot.command("cur", async (ctx) => {
+	if (!isBotEnabled) {
+      ctx.reply("Бот выключен :(");
+      return;
+  }
 	await ctx.conversation.enter('currentChannelsConversation');
 });
 
 bot.command("del", async (ctx) => {
+	if (!isBotEnabled) {
+      ctx.reply("Бот выключен :(");
+      return;
+  }
   const channelName = ctx.match; 
 	// если команда + название
   if (isUserName(channelName)) {
@@ -136,10 +209,18 @@ bot.command("del", async (ctx) => {
 });
 
 bot.command("settings", async (ctx) => {
+	if (!isBotEnabled) {
+      ctx.reply("Бот выключен :(");
+      return;
+  }
 	await ctx.conversation.enter("settingsConversation");
 });
 
 bot.on("callback_query:data", async (ctx) => {
+	if (!isBotEnabled) {
+      ctx.reply("Бот выключен :(");
+      return;
+  }
 	const callbackData = ctx.callbackQuery.data;
 
 	if (callbackData === "leave") {
@@ -158,3 +239,7 @@ bot.on("callback_query:data", async (ctx) => {
 });
 
 bot.start();
+
+bot.catch(async (err) => {
+  await bot.api.sendMessage(devUserId, `⚠️ Бот упал с ошибкой: ${err.message}`);
+});
