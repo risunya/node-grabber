@@ -32,8 +32,13 @@ bot.command("crash", (ctx) => {
 
 bot.use(async (ctx, next) => {
   const userId = Number(process.env.USER_ID);
-  
-  if (ctx.chat?.type == "private" && ctx.from?.id !== userId) {
+
+  const isPrivateChat = ctx.chat?.type == "private";
+  const fromId = ctx.from?.id;
+  const isFromBot = ctx.from?.is_bot;
+
+  // Блокируем всех людей, кроме тебя, в личных сообщениях
+  if (isPrivateChat && !isFromBot && fromId !== userId) {
     return ctx.reply("Извините, вы не авторизованы для использования этого бота.");
   }
 
@@ -118,7 +123,7 @@ const forwardMessage = async (msg) => {
   }
 
   // Поиск канала
-  const channel = getChannelsData().find((ch) => ch.channelIdFrom === sendFrom);
+  const channel = getChannelsData().find((ch) => ch.channelIdFrom == sendFrom);
   if (!channel) return;
 
   // Проверка фильтров
