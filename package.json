@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@grammyjs/auto-retry": "^2.0.2",
     "@grammyjs/conversations": "^2.0.1",
     "@mtcute/dispatcher": "^0.21.0",
     "@mtcute/node": "^0.21.0",
