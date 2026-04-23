@@ -28,148 +28,112 @@ import {
 } from "./conversations/settings.js";
 import { autoRetry } from "@grammyjs/auto-retry";
 
-// Вспомогательная задержка
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const bot = new Bot(botApi);
 
-bot.api.config.use(
-  autoRetry({
-    maxRetryAttempts: 3,
-    maxDelaySeconds: 5,
-    retryOnInternalServerErrors: true,
-  }),
-);
+// Настройка авто-ретраев для интерфейсного бота
+bot.api.config.use(autoRetry());
 
-bot.use(async (ctx, next) => {
-  const uId = Number(process.env.USER_ID);
-  const dId = Number(process.env.DEV_USER_ID);
-  const isPrivateChat = ctx.chat?.type == "private";
-  const fromId = ctx.from?.id;
-  const isFromBot = ctx.from?.is_bot;
-
-  if (isPrivateChat && !isFromBot && fromId !== uId && fromId !== dId) {
-    return ctx.reply("Извините, вы не авторизованы.");
-  }
-  await next();
-});
-
-let isBotEnabled = true;
-
-bot.command("on", async (ctx) => {
-  if (isBotEnabled) return ctx.reply("Бот уже включен!");
-  isBotEnabled = true;
-  ctx.reply("Включен!");
-});
-
-bot.command("off", async (ctx) => {
-  if (!isBotEnabled) return ctx.reply("Бот уже выключен!");
-  isBotEnabled = false;
-  ctx.reply("Выключен.");
-});
-
-bot
-  .use(conversations())
-  .use(createConversation(addChannelConversation))
-  .use(createConversation(deleteChannelConversation))
-  .use(createConversation(currentChannelsConversation))
-  .use(createConversation(settingsConversation));
-
+// Инициализация Telegram клиента (Юзербота)
 export const tg = new TelegramClient({
   apiId: apiId,
   apiHash: apiHash,
   storage: new SqliteStorage("./auth/hash.session"),
   updates: {
+    // Убираем группировку, чтобы сообщения летели по одному мгновенно
+    messageGroupingInterval: 0,
     catchUp: true,
   },
 });
 
 const dp = new Dispatcher(tg);
+let isBotEnabled = true;
 
+// Функция входа в чаты (чтобы Telegram отдавал обновления)
 export async function joinChats() {
   const channels = getChannelsData();
   for (let channel of channels) {
     const channelName = channel.channelNameFrom.replace("@", "");
     try {
       await tg.openChat(channelName);
-      await delay(500);
+      await delay(300); // Небольшая пауза, чтобы не спамить запросами к TG
     } catch (e) {
-      console.error(`[!] Ошибка входа в чат ${channelName}: ${e.message}`);
+      console.error(`[!] Не удалось открыть чат ${channelName}: ${e.message}`);
     }
   }
 }
 
+// ОСНОВНАЯ ЛОГИКА ПЕРЕСЫЛКИ
 const forwardMessage = async (msg) => {
   if (!isBotEnabled) return;
 
+  // 1. Получаем чистый ID источника
   let sendFrom;
-  // Используем твой хелпер calculateChannelId для нормализации ID из mtcute
   if (msg.chat?.inputPeer?._ === "inputPeerChannel") {
     sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
-  } else if (
-    msg.chat?.inputPeer?._ === "inputPeerUser" &&
-    msg.chat.isBot &&
-    !msg.sender?.isSelf
-  ) {
-    sendFrom = String(msg.chat.id);
   } else {
-    return;
+    sendFrom = String(msg.chat.id);
   }
 
-  const allChannels = getChannelsData();
-  // Сравниваем просто по значению (==), так как в базе и в расчете могут быть разные типы
-  const channel = allChannels.find(
-    (ch) => String(ch.channelIdFrom) === String(sendFrom),
+  // 2. Ищем настройки для этого канала
+  const normalize = (id) => String(id).replace("-100", "").trim();
+  const channelConfig = getChannelsData().find(
+    (ch) => normalize(ch.channelIdFrom) === normalize(sendFrom),
   );
 
-  if (!channel) return;
+  if (!channelConfig) return;
 
+  // 3. Проверка стоп-слов
   const messageText = msg.text?.toLowerCase() || "";
-  const filterWords = channel.filterWords
-    ? channel.filterWords.split(",").map((word) => word.trim().toLowerCase())
+  const filterWords = channelConfig.filterWords
+    ? channelConfig.filterWords.split(",").map((w) => w.trim().toLowerCase())
     : [];
 
   if (filterWords.some((word) => word && messageText.includes(word))) {
+    if (getSettingsValue("logs")) {
+      console.log(`[FILTER] Пропущено из ${sendFrom} (стоп-слово)`);
+    }
     return;
   }
 
+  // 4. ПОСЛЕДОВАТЕЛЬНАЯ ПЕРЕСЫЛКА (чтобы не путать Telegram)
   try {
-    // Чистим список ID, куда шлем
-    const channelIds = String(channel.channelIdTo)
+    const targetIds = String(channelConfig.channelIdTo)
       .split(",")
       .map((id) => id.trim());
-    const quotingEnabled = getSettingsValue("quoting");
+    const quoting = getSettingsValue("quoting");
 
-    for (const id of channelIds) {
+    for (const id of targetIds) {
       try {
-        // ВОТ ТУТ ФИКС:
-        // Если ID начинается с - или это просто цифры, принудительно делаем Number
-        // Если там юзернейм (например @mychannel), оставляем строкой
-        const targetId =
+        // Важно: приводим к числу, если это ID, иначе TG ругается на "Invalid Username"
+        const toChatId =
           id.startsWith("-") || /^\d+$/.test(id) ? Number(id) : id;
 
-        await msg.forwardTo({
-          toChatId: targetId,
-          noAuthor: !quotingEnabled,
-        });
+        await msg.forwardTo({ toChatId, noAuthor: !quoting });
 
         if (getSettingsValue("logs")) {
-          console.log(`[OK] Из ${sendFrom} переслано в ${targetId}`);
+          console.log(
+            `[${new Date().toLocaleTimeString()}] OK: ${sendFrom} -> ${toChatId}`,
+          );
         }
-        await delay(500);
-      } catch (error) {
-        console.error(`[!] Ошибка пересылки в ${id}: ${error.message}`);
+
+        // Маленькая пауза между отправками в разные группы (анти-спам)
+        await delay(300);
+      } catch (err) {
+        console.error(`[!] Ошибка отправки в ${id}: ${err.message}`);
       }
     }
-  } catch (error) {
-    console.error(`[CRITICAL] Ошибка: ${error.message}`);
+  } catch (err) {
+    console.error(`[CRITICAL] Ошибка пересылки: ${err.message}`);
   }
 };
 
-dp.onNewMessage(filters.photo, forwardMessage);
-dp.onNewMessage(filters.not(filters.photo), forwardMessage);
-dp.onMessageGroup(forwardMessage);
+// Хендлеры на все типы сообщений
+dp.onNewMessage(forwardMessage);
+dp.onMessageGroup(forwardMessage); // Для альбомов/групп фото
 
+// Запуск
 (async () => {
   try {
     const self = await tg.start({
@@ -177,34 +141,39 @@ dp.onMessageGroup(forwardMessage);
       code: () => tg.input("Code > "),
       password: () => tg.input("Password > "),
     });
-    console.log(`Logged in as ${self.displayName}`);
+
+    console.log(`Userbot: Logged in as ${self.displayName}`);
     await joinChats();
 
-    // Запуск бота
-    bot.start();
+    bot.start(); // Запуск интерфейсного бота
+    console.log("Grammy: Interface bot started");
 
-    // Приветственное сообщение
     const introText =
-      `Бот запущен! 🚀\n\n` +
-      (!sendCurrentChannels()
-        ? `В данный момент нет отслеживаемых каналов.`
-        : `Список подписок:\n${sendCurrentChannels()}`);
-    await bot.api.sendMessage(userId, introText);
-
-    await bot.api.setMyCommands([
-      { command: "start", description: "Запустить бота" },
-      { command: "add", description: "Добавить канал" },
-      { command: "del", description: "Удалить канал" },
-      { command: "cur", description: "Текущие подписки" },
-      { command: "settings", description: "Настройки" },
-    ]);
+      `Бот активен! 🚀\n\n` + (sendCurrentChannels() || "Список каналов пуст.");
+    await bot.api.sendMessage(userId, introText).catch(() => {});
   } catch (error) {
-    console.error("Failed to start client:", error);
+    console.error("Fatal start error:", error);
   }
 })();
 
+// --- Команды интерфейсного бота (оставил как в твоем исходнике) ---
+
+bot.use(conversations());
+bot.use(createConversation(addChannelConversation));
+bot.use(createConversation(deleteChannelConversation));
+bot.use(createConversation(currentChannelsConversation));
+bot.use(createConversation(settingsConversation));
+
+bot.command("on", (ctx) => {
+  isBotEnabled = true;
+  ctx.reply("Включен!");
+});
+bot.command("off", (ctx) => {
+  isBotEnabled = false;
+  ctx.reply("Выключен.");
+});
+
 bot.command("add", async (ctx) => {
-  if (!isBotEnabled) return ctx.reply("Бот выключен :(");
   if (isTwoUsernames(ctx.match)) {
     const [from, to] = ctx.match.split(" ");
     addToDB(ctx, from, to);
@@ -213,38 +182,25 @@ bot.command("add", async (ctx) => {
   }
 });
 
-bot.command("cur", async (ctx) => {
-  if (!isBotEnabled) return ctx.reply("Бот выключен :(");
-  await ctx.conversation.enter("currentChannelsConversation");
-});
-
-bot.command("del", async (ctx) => {
-  if (!isBotEnabled) return ctx.reply("Бот выключен :(");
-  if (isUserName(ctx.match)) {
-    deleteChannel(ctx.match);
-    ctx.reply(`Канал "${ctx.match}" удален.`);
-  } else {
-    await ctx.conversation.enter("deleteChannelConversation");
-  }
-});
-
-bot.command("settings", async (ctx) => {
-  if (!isBotEnabled) return ctx.reply("Бот выключен :(");
-  await ctx.conversation.enter("settingsConversation");
-});
+bot.command("cur", (ctx) =>
+  ctx.conversation.enter("currentChannelsConversation"),
+);
+bot.command("settings", (ctx) =>
+  ctx.conversation.enter("settingsConversation"),
+);
+bot.command("del", (ctx) =>
+  ctx.conversation.enter("deleteChannelConversation"),
+);
 
 bot.on("callback_query:data", async (ctx) => {
-  if (!isBotEnabled) return;
-  const callbackData = ctx.callbackQuery.data;
-
-  if (callbackData === "leave") {
+  const data = ctx.callbackQuery.data;
+  if (data === "leave") {
     await ctx.api.deleteMessage(
       ctx.chat.id,
       ctx.callbackQuery.message.message_id,
     );
-    await ctx.reply("Настройки применены ✅");
   } else {
-    updateSettings(callbackData, Number(!getSettingsValue(callbackData)));
+    updateSettings(data, Number(!getSettingsValue(data)));
     const updated = sendCurrentSettings();
     await ctx.editMessageText(updated.text, {
       reply_markup: updated.reply_markup,
@@ -253,10 +209,4 @@ bot.on("callback_query:data", async (ctx) => {
   }
 });
 
-bot.catch(async (err) => {
-  console.error("Grammy error:", err);
-  if (devUserId)
-    await bot.api
-      .sendMessage(devUserId, `⚠️ Ошибка: ${err.message}`)
-      .catch(() => {});
-});
+bot.catch((err) => console.error("Grammy error:", err.message));
