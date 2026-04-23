@@ -102,30 +102,24 @@ export async function joinChats() {
 const forwardMessage = async (msg) => {
   if (!isBotEnabled) return;
 
-  // Лог для отладки
-  const rawChatId = String(msg.chat.id);
-  console.log(
-    `[NEW MESSAGE] ID: ${msg.id} | Chat: ${rawChatId} | Text: ${msg.text?.slice(0, 20)}...`,
-  );
-
   let sendFrom;
+  // Используем твой хелпер calculateChannelId для нормализации ID из mtcute
   if (msg.chat?.inputPeer?._ === "inputPeerChannel") {
-    sendFrom = String(calculateChannelId(msg.chat.inputPeer.channelId));
+    sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
   } else if (
     msg.chat?.inputPeer?._ === "inputPeerUser" &&
     msg.chat.isBot &&
     !msg.sender?.isSelf
   ) {
-    sendFrom = rawChatId;
+    sendFrom = String(msg.chat.id);
   } else {
     return;
   }
 
-  // Нормализуем ID для сравнения (убираем -100)
-  const normalize = (id) => String(id).replace("-100", "").trim();
-
-  const channel = getChannelsData().find(
-    (ch) => normalize(ch.channelIdFrom) === normalize(sendFrom),
+  const allChannels = getChannelsData();
+  // Сравниваем просто по значению (==), так как в базе и в расчете могут быть разные типы
+  const channel = allChannels.find(
+    (ch) => String(ch.channelIdFrom) === String(sendFrom),
   );
 
   if (!channel) return;
@@ -136,30 +130,39 @@ const forwardMessage = async (msg) => {
     : [];
 
   if (filterWords.some((word) => word && messageText.includes(word))) {
-    if (getSettingsValue("logs")) {
-      console.log(`[FILTER] Сообщение из ${sendFrom} содержит стоп-слово.`);
-    }
     return;
   }
 
   try {
+    // Чистим список ID, куда шлем
     const channelIds = String(channel.channelIdTo)
       .split(",")
       .map((id) => id.trim());
     const quotingEnabled = getSettingsValue("quoting");
-    const logEnabled = getSettingsValue("logs");
 
     for (const id of channelIds) {
       try {
-        await msg.forwardTo({ toChatId: id, noAuthor: !quotingEnabled });
-        if (logEnabled) console.log(`[OK] Переслано из ${sendFrom} в ${id}`);
+        // ВОТ ТУТ ФИКС:
+        // Если ID начинается с - или это просто цифры, принудительно делаем Number
+        // Если там юзернейм (например @mychannel), оставляем строкой
+        const targetId =
+          id.startsWith("-") || /^\d+$/.test(id) ? Number(id) : id;
+
+        await msg.forwardTo({
+          toChatId: targetId,
+          noAuthor: !quotingEnabled,
+        });
+
+        if (getSettingsValue("logs")) {
+          console.log(`[OK] Из ${sendFrom} переслано в ${targetId}`);
+        }
         await delay(500);
       } catch (error) {
         console.error(`[!] Ошибка пересылки в ${id}: ${error.message}`);
       }
     }
   } catch (error) {
-    console.error(`[CRITICAL] Ошибка пересылки: ${error.message}`);
+    console.error(`[CRITICAL] Ошибка: ${error.message}`);
   }
 };
 
