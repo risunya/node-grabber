@@ -36,7 +36,7 @@ bot.api.config.use(
     maxRetryAttempts: 3, // Максимум 3 попытки
     maxDelaySeconds: 5, // Максимальная задержка между попытками
     retryOnInternalServerErrors: true, // Повторять при ошибках 5xx
-  })
+  }),
 );
 
 bot.command("crash", (ctx) => {
@@ -63,7 +63,7 @@ bot.use(async (ctx, next) => {
     fromId !== devUserId
   ) {
     return ctx.reply(
-      "Извините, вы не авторизованы для использования этого бота."
+      "Извините, вы не авторизованы для использования этого бота.",
     );
   }
 
@@ -105,6 +105,7 @@ export const tg = new TelegramClient({
   storage: new SqliteStorage("./auth/hash.session"),
   updates: {
     messageGroupingInterval: 250,
+    catchUp: true,
   },
 });
 
@@ -128,8 +129,8 @@ export async function joinChats() {
   const channels = getChannelsData();
   for (let channel of channels) {
     const channelName = channel.channelNameFrom.replace("@", "");
-    await tg.closeChat(channelName);
     await tg.openChat(channelName);
+    await new Promise((r) => setTimeout(r, 1000));
   }
 }
 
@@ -164,8 +165,8 @@ const forwardMessage = async (msg) => {
     if (getSettingsValue("logs")) {
       console.log(
         `Сообщение из ${sendFrom} отфильтровано. Содержит слова: ${filterWords.join(
-          ", "
-        )}`
+          ", ",
+        )}`,
       );
     }
     return;
@@ -189,7 +190,7 @@ const forwardMessage = async (msg) => {
         } catch (error) {
           console.error(`Ошибка пересылки в ${id}: ${error.message}`);
         }
-      })
+      }),
     );
   } catch (error) {
     console.error(`Общая ошибка пересылки: ${error.message}`);
@@ -271,7 +272,7 @@ bot.on("callback_query:data", async (ctx) => {
   if (callbackData === "leave") {
     await ctx.api.deleteMessage(
       ctx.chat.id,
-      ctx.callbackQuery.message.message_id
+      ctx.callbackQuery.message.message_id,
     );
     await ctx.reply("Настройки применены ✅");
   } else {
