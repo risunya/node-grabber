@@ -1,4 +1,4 @@
-import { SqliteStorage, TelegramClient, sleep } from "@mtcute/node";
+import { SqliteStorage, TelegramClient } from "@mtcute/node";
 import { Bot } from "grammy";
 import { Dispatcher, filters } from "@mtcute/dispatcher";
 import "dotenv/config";
@@ -28,7 +28,9 @@ import {
 } from "./conversations/settings.js";
 import { autoRetry } from "@grammyjs/auto-retry";
 
-// --- КОНФИГУРАЦИЯ BOT API (grammY) ---
+// Вспомогательная задержка
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export const bot = new Bot(botApi);
 
 bot.api.config.use(
@@ -40,17 +42,13 @@ bot.api.config.use(
 );
 
 bot.use(async (ctx, next) => {
-  const targetId = Number(process.env.USER_ID);
-  const devId = Number(process.env.DEV_USER_ID);
-  const isPrivate = ctx.chat?.type === "private";
+  const uId = Number(process.env.USER_ID);
+  const dId = Number(process.env.DEV_USER_ID);
+  const isPrivateChat = ctx.chat?.type == "private";
   const fromId = ctx.from?.id;
+  const isFromBot = ctx.from?.is_bot;
 
-  if (
-    isPrivate &&
-    !ctx.from?.is_bot &&
-    fromId !== targetId &&
-    fromId !== devId
-  ) {
+  if (isPrivateChat && !isFromBot && fromId !== uId && fromId !== dId) {
     return ctx.reply("Извините, вы не авторизованы.");
   }
   await next();
@@ -58,14 +56,16 @@ bot.use(async (ctx, next) => {
 
 let isBotEnabled = true;
 
-bot.command("on", (ctx) => {
+bot.command("on", async (ctx) => {
+  if (isBotEnabled) return ctx.reply("Бот уже включен!");
   isBotEnabled = true;
-  ctx.reply("Бот включен!");
+  ctx.reply("Включен!");
 });
 
-bot.command("off", (ctx) => {
+bot.command("off", async (ctx) => {
+  if (!isBotEnabled) return ctx.reply("Бот уже выключен!");
   isBotEnabled = false;
-  ctx.reply("Бот выключен.");
+  ctx.reply("Выключен.");
 });
 
 bot
@@ -75,13 +75,11 @@ bot
   .use(createConversation(currentChannelsConversation))
   .use(createConversation(settingsConversation));
 
-// --- КОНФИГУРАЦИЯ USERBOT (mtcute) ---
 export const tg = new TelegramClient({
   apiId: apiId,
   apiHash: apiHash,
   storage: new SqliteStorage("./auth/hash.session"),
   updates: {
-    // Убрали groupingInterval, чтобы избежать TimeoutNegativeWarning
     catchUp: true,
   },
 });
@@ -94,76 +92,114 @@ export async function joinChats() {
     const channelName = channel.channelNameFrom.replace("@", "");
     try {
       await tg.openChat(channelName);
-      await sleep(1000);
+      await delay(500);
     } catch (e) {
-      console.error(`[!] Ошибка чата ${channelName}: ${e.message}`);
+      console.error(`[!] Ошибка входа в чат ${channelName}: ${e.message}`);
     }
   }
 }
 
 const forwardMessage = async (msg) => {
-  // ХАРТБИТ: если видишь это в консоли, значит MTProto работает
-  console.log(
-    `[NEW MESSAGE] ID: ${msg.id} | Chat: ${msg.chat.id} | Text: ${msg.text?.slice(0, 20)}...`,
-  );
+  if (!isBotEnabled) return;
 
-  if (!isBotEnabled || !msg.isRegular) return;
+  // Лог для отладки
+  const rawChatId = String(msg.chat.id);
+  console.log(
+    `[NEW MESSAGE] ID: ${msg.id} | Chat: ${rawChatId} | Text: ${msg.text?.slice(0, 20)}...`,
+  );
 
   let sendFrom;
   if (msg.chat?.inputPeer?._ === "inputPeerChannel") {
-    sendFrom = calculateChannelId(msg.chat.inputPeer.channelId);
+    sendFrom = String(calculateChannelId(msg.chat.inputPeer.channelId));
   } else if (
     msg.chat?.inputPeer?._ === "inputPeerUser" &&
     msg.chat.isBot &&
     !msg.sender?.isSelf
   ) {
-    sendFrom = msg.chat.id;
+    sendFrom = rawChatId;
   } else {
     return;
   }
 
-  const channel = getChannelsData().find((ch) => ch.channelIdFrom == sendFrom);
+  // Нормализуем ID для сравнения (убираем -100)
+  const normalize = (id) => String(id).replace("-100", "").trim();
+
+  const channel = getChannelsData().find(
+    (ch) => normalize(ch.channelIdFrom) === normalize(sendFrom),
+  );
+
   if (!channel) return;
 
   const messageText = msg.text?.toLowerCase() || "";
   const filterWords = channel.filterWords
-    ? channel.filterWords.split(",").map((w) => w.trim().toLowerCase())
+    ? channel.filterWords.split(",").map((word) => word.trim().toLowerCase())
     : [];
 
-  if (filterWords.some((word) => messageText.includes(word))) {
-    if (getSettingsValue("logs"))
-      console.log(`[FILTER] Сообщение из ${sendFrom} содержит стоп-слова.`);
+  if (filterWords.some((word) => word && messageText.includes(word))) {
+    if (getSettingsValue("logs")) {
+      console.log(`[FILTER] Сообщение из ${sendFrom} содержит стоп-слово.`);
+    }
     return;
   }
 
   try {
-    const channelIds = channel.channelIdTo
+    const channelIds = String(channel.channelIdTo)
       .split(",")
-      .map((id) => Number(id.trim()));
-    const quoting = getSettingsValue("quoting");
+      .map((id) => id.trim());
+    const quotingEnabled = getSettingsValue("quoting");
     const logEnabled = getSettingsValue("logs");
 
     for (const id of channelIds) {
       try {
-        await msg.forwardTo({ toChatId: id, noAuthor: !quoting });
-        if (logEnabled) console.log(`[SUCCESS] Из ${sendFrom} -> ${id}`);
-        await sleep(500); // Защита от Flood Wait
-      } catch (err) {
-        console.error(`[!] Ошибка в ${id}: ${err.message}`);
-        if (err.message.includes("wait of")) await sleep(3000);
+        await msg.forwardTo({ toChatId: id, noAuthor: !quotingEnabled });
+        if (logEnabled) console.log(`[OK] Переслано из ${sendFrom} в ${id}`);
+        await delay(500);
+      } catch (error) {
+        console.error(`[!] Ошибка пересылки в ${id}: ${error.message}`);
       }
     }
-  } catch (err) {
-    console.error(`[CRITICAL] Ошибка цикла пересылки: ${err.message}`);
+  } catch (error) {
+    console.error(`[CRITICAL] Ошибка пересылки: ${error.message}`);
   }
 };
 
-// Регистрация обработчиков
 dp.onNewMessage(filters.photo, forwardMessage);
 dp.onNewMessage(filters.not(filters.photo), forwardMessage);
 dp.onMessageGroup(forwardMessage);
 
-// Запуск Bot API
+(async () => {
+  try {
+    const self = await tg.start({
+      phone: () => tg.input("Phone > "),
+      code: () => tg.input("Code > "),
+      password: () => tg.input("Password > "),
+    });
+    console.log(`Logged in as ${self.displayName}`);
+    await joinChats();
+
+    // Запуск бота
+    bot.start();
+
+    // Приветственное сообщение
+    const introText =
+      `Бот запущен! 🚀\n\n` +
+      (!sendCurrentChannels()
+        ? `В данный момент нет отслеживаемых каналов.`
+        : `Список подписок:\n${sendCurrentChannels()}`);
+    await bot.api.sendMessage(userId, introText);
+
+    await bot.api.setMyCommands([
+      { command: "start", description: "Запустить бота" },
+      { command: "add", description: "Добавить канал" },
+      { command: "del", description: "Удалить канал" },
+      { command: "cur", description: "Текущие подписки" },
+      { command: "settings", description: "Настройки" },
+    ]);
+  } catch (error) {
+    console.error("Failed to start client:", error);
+  }
+})();
+
 bot.command("add", async (ctx) => {
   if (!isBotEnabled) return ctx.reply("Бот выключен :(");
   if (isTwoUsernames(ctx.match)) {
@@ -183,7 +219,7 @@ bot.command("del", async (ctx) => {
   if (!isBotEnabled) return ctx.reply("Бот выключен :(");
   if (isUserName(ctx.match)) {
     deleteChannel(ctx.match);
-    ctx.reply(`Удалено: ${ctx.match}`);
+    ctx.reply(`Канал "${ctx.match}" удален.`);
   } else {
     await ctx.conversation.enter("deleteChannelConversation");
   }
@@ -196,54 +232,28 @@ bot.command("settings", async (ctx) => {
 
 bot.on("callback_query:data", async (ctx) => {
   if (!isBotEnabled) return;
-  const data = ctx.callbackQuery.data;
-  if (data === "leave") {
+  const callbackData = ctx.callbackQuery.data;
+
+  if (callbackData === "leave") {
     await ctx.api.deleteMessage(
       ctx.chat.id,
       ctx.callbackQuery.message.message_id,
     );
+    await ctx.reply("Настройки применены ✅");
   } else {
-    updateSettings(data, Number(!getSettingsValue(data)));
+    updateSettings(callbackData, Number(!getSettingsValue(callbackData)));
     const updated = sendCurrentSettings();
     await ctx.editMessageText(updated.text, {
       reply_markup: updated.reply_markup,
     });
+    await ctx.answerCallbackQuery("Обновлено ✅");
   }
-  await ctx.answerCallbackQuery("Обновлено ✅");
 });
 
-// ГЛАВНЫЙ ЗАПУСК
-(async () => {
-  try {
-    const self = await tg.start({
-      phone: () => tg.input("Phone > "),
-      code: () => tg.input("Code > "),
-      password: () => tg.input("Password > "),
-    });
-    console.log(`[USERBOT] Авторизован как ${self.displayName}`);
-
-    await joinChats();
-
-    // Запуск grammY
-    bot.start();
-
-    // Отправка уведомления о запуске
-    const status = !sendCurrentChannels()
-      ? "Нет каналов"
-      : `Каналы:\n${sendCurrentChannels()}`;
+bot.catch(async (err) => {
+  console.error("Grammy error:", err);
+  if (devUserId)
     await bot.api
-      .sendMessage(userId, `Бот активен! 🚀\n\n${status}`)
+      .sendMessage(devUserId, `⚠️ Ошибка: ${err.message}`)
       .catch(() => {});
-
-    // Поддержание статуса online
-    setInterval(() => {
-      tg.call({ _: "account.updateStatus", offline: false }).catch(() => {});
-    }, 60000);
-  } catch (error) {
-    console.error("[FATAL] Ошибка запуска:", error);
-  }
-})();
-
-bot.catch((err) => {
-  console.error("[GRAMMY ERROR]", err);
 });
